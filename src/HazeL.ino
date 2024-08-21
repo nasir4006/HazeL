@@ -37,7 +37,7 @@
 #define ENC_LEFT_A 5
 #define ENC_LEFT_B 7
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
-#define DEBUG_PRINT
+// #define DEBUG_PRINT
 
 Adafruit_PM25AQI dustSensor = Adafruit_PM25AQI();
 PM25_AQI_Data pmData;
