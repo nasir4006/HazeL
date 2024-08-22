@@ -10,13 +10,17 @@
 // Make sure you have these five libraries installed in Documents/Arduino/libraries
 #include <Adafruit_I2CDevice.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1327.h>
+//#include <Adafruit_SSD1327.h>
+#include "Display.h"
+#include <Adafruit_ST7735.h>
 #include <Encoder.h>
-#include "SdFat.h"
+// #include "SdFat.h"
+#include <LittleFS.h>
 #include <TinyGPS++.h>
 #include <TimeLib.h>
-#include <RTCZero.h>
-#include "Seeed_BMP280.h"
+//#include <RTCZero.h>
+#include <ESP32Time.h>
+#include <Seeed_BMP280.h>
 
 #define SAMP_TIME 2500 // number of ms between sensor readings
 #define BLINK_TIME 30 // time in ms between LED blinks on successful write to SD
@@ -30,19 +34,27 @@
 #define SCREEN_ADDRESS 0x3D
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 128
-#define ENC_RIGHT_BUTTON A1
-#define ENC_RIGHT_A 0
-#define ENC_RIGHT_B 1
-#define ENC_LEFT_BUTTON A2
-#define ENC_LEFT_A 5
-#define ENC_LEFT_B 7
+// TBD
+//#define ENC_RIGHT_BUTTON A1
+// #define ENC_RIGHT_A 0
+// #define ENC_RIGHT_B 1
+// #define ENC_LEFT_BUTTON A2
+// #define ENC_LEFT_A 5
+// #define ENC_LEFT_B 7
+
+#define ENC_RIGHT_BUTTON -1
+#define ENC_RIGHT_A -1
+#define ENC_RIGHT_B -1
+#define ENC_LEFT_BUTTON -1
+#define ENC_LEFT_A -1
+#define ENC_LEFT_B -1
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
 // #define DEBUG_PRINT
 
+#define LED_BUILTIN -1
 HM3301 dustSensor;
 BMP280 TPSensor;
-
-SdFat SD;
+#define SD LittleFS
 File dataFile;
 File metaFile;
 char dataFileName[23]; // YYMMDD_HHMMSS_data.txt
@@ -75,9 +87,10 @@ uint8_t manualHour = 0;
 uint8_t manualMinute = 0;
 bool manualTimeEntry = false; // false means use GPS
 bool rtcSet = false; // flag to indicate if RTC is set or not
-RTCZero rtc;
+//RTCZero rtc;
+ESP32Time rtc;
 
-Adafruit_SSD1327 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+//Adafruit_SSD1327 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 Encoder encRight(ENC_RIGHT_B, ENC_RIGHT_A);
 Encoder encLeft(ENC_LEFT_B, ENC_LEFT_A);
@@ -131,7 +144,8 @@ void setup() {
   Wire.begin();
 
   // Initialize comms with OLED display
-  display.begin(SCREEN_ADDRESS);
+  DisplaySetup();
+  setLCDBacklight(255);
 
   display.clearDisplay();
   updateDisplay("Initializing...", 40, false);
@@ -156,7 +170,8 @@ void setup() {
   delay(2500);
 
   // Initialize SD card communication
-  if(!SD.begin(SD_CS_PIN))
+  //if(!SD.begin(SD_CS_PIN))
+  if(!SD.begin(true))
   {
     #ifdef DEBUG_PRINT
     Serial.println("Card failed");
@@ -200,7 +215,7 @@ void setup() {
   }
 
   // Begin RTC
-  rtc.begin();
+  //rtc.begin();
 
   // Attach ISR for flipping buttonFlag when button is pressed
   attachInterrupt(digitalPinToInterrupt(ENC_RIGHT_BUTTON), encRightButtonISR, FALLING);
@@ -367,8 +382,8 @@ void loop() {
           if(rtcSet)
           {
             manualDay = rtc.getDay();
-            manualHour = rtc.getHours();
-            manualMinute = rtc.getMinutes();
+            manualHour = rtc.getHour();
+            manualMinute = rtc.getMinute();
             manualMonth = rtc.getMonth();
             manualYear = rtc.getYear();
           }
@@ -396,8 +411,9 @@ void loop() {
         #endif
 
         // set RTC
-        rtc.setDate(manualDay, manualMonth, manualYear % 100); // year is saved as an offset from 2000
-        rtc.setTime(manualHour, manualMinute, 0);
+        // TBD
+        //rtc.setDate(manualDay, manualMonth, manualYear % 100); // year is saved as an offset from 2000
+        //rtc.setTime(manualHour, manualMinute, 0);
 
         if(!rtcSet) rtcSet = true;
         
@@ -546,8 +562,8 @@ void updateSampleSD()
     msTimer = millis() - dataStartMillis;
   }
 
-  BMP280_temp_t temp;
-  BMP280_press_t press;
+  float temp;
+  float press;
 
   if(timestampFlag) // if it is time to get a time stamp
   {
@@ -559,9 +575,9 @@ void updateSampleSD()
     if(!manualTimeEntry)
     {
       display.clearDisplay();
-      display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, SSD1327_WHITE);
-      display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, SSD1327_WHITE);
-      display.setTextColor(SSD1327_WHITE);
+      display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
+      display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
+      display.setTextColor(ST7735_WHITE);
       display.setCursor(10, display.height()-8);
       display.print("Back ");
       updateDisplay("Reading GPS...", 40, false);
@@ -614,8 +630,9 @@ void updateSampleSD()
             gpsDisplayFail = false;
 
             // resync RTC every successful GPS read
-            rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() % 100);
-            rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
+            // TBD
+            // rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() % 100);
+            // rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
 
             if(!rtcSet) rtcSet = true;
             break;
@@ -675,12 +692,12 @@ void updateSampleSD()
     
     if(manualTimeEntry || timeoutFlag) // if manual time entry or GPS timed out, overwrite timestamp with RTC values
     {
-      utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
-      utcMonth = rtc.getMonth();
-      utcDay = rtc.getDay();
-      utcHour = rtc.getHours();
-      utcMinute = rtc.getMinutes();
-      utcSecond = rtc.getSeconds();
+      // utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
+      // utcMonth = rtc.getMonth();
+      // utcDay = rtc.getDay();
+      // utcHour = rtc.getHours();
+      // utcMinute = rtc.getMinutes();
+      // utcSecond = rtc.getSeconds();
     }
 
     metaFile = SD.open(metaFileName, FILE_WRITE);
@@ -747,14 +764,14 @@ void updateSampleSD()
       }
 
       Serial.print(',');
-      Serial.print(temp.integral); Serial.print('.'); Serial.print(temp.fractional);
+      Serial.print(temp, 2);
       Serial.print(',');
-      Serial.print(press.integral); Serial.print('.'); Serial.println(press.fractional);
+      Serial.print(press, 2);
 
       metaFile.print(',');
-      metaFile.print(temp.integral); metaFile.print('.'); metaFile.print(temp.fractional);
+      metaFile.print(temp, 2);
       metaFile.print(',');
-      metaFile.print(press.integral); metaFile.print('.'); metaFile.print(press.fractional);
+      metaFile.print(press, 2);
       metaFile.print('\n');
       metaFile.close();
     }
@@ -801,9 +818,9 @@ void updateSampleSD()
     utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
     utcMonth = rtc.getMonth();
     utcDay = rtc.getDay();
-    utcHour = rtc.getHours();
-    utcMinute = rtc.getMinutes();
-    utcSecond = rtc.getSeconds();
+    utcHour = rtc.getHour();
+    utcMinute = rtc.getMinute();
+    utcSecond = rtc.getSecond();
 
     // Display data in the serial monitor
     
@@ -1062,9 +1079,9 @@ void createDataFiles()
     unsigned long gpsTimeoutMillis = GPS_FIRST_TIMEOUT;
 
       display.clearDisplay();
-      display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, SSD1327_WHITE);
-      display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, SSD1327_WHITE);
-      display.setTextColor(SSD1327_WHITE);
+      display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
+      display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
+      display.setTextColor(ST7735_WHITE);
       display.setCursor(10, display.height()-8);
       display.print("Back ");
       updateDisplay("Reading GPS...", 40, false);
@@ -1092,9 +1109,9 @@ void createDataFiles()
         Serial.println("GPS timeout");
         #endif
         display.clearDisplay();
-        display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, SSD1327_WHITE);
-        display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, SSD1327_WHITE);
-        display.setTextColor(SSD1327_WHITE);
+        display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
+        display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
+        display.setTextColor(ST7735_WHITE);
         display.setCursor(10, display.height()-8);
         display.print("Back ");
         updateDisplay("GPS read failed", 40, false);
@@ -1126,12 +1143,13 @@ void createDataFiles()
         // prevTimeStamp = now();
 
         // GPS data is valid, set RTC
-        rtc.setDay(gps.date.day());
-        rtc.setMonth(gps.date.month());
-        rtc.setYear(gps.date.year() % 100);
-        rtc.setHours(gps.time.hour());
-        rtc.setMinutes(gps.time.minute());
-        rtc.setSeconds(gps.time.second());
+        // TBD
+        // rtc.setDay(gps.date.day());
+        // rtc.setMonth(gps.date.month());
+        // rtc.setYear(gps.date.year() % 100);
+        // rtc.setHours(gps.time.hour());
+        // rtc.setMinutes(gps.time.minute());
+        // rtc.setSeconds(gps.time.second());
 
         if(!rtcSet) rtcSet = true;
 
@@ -1168,9 +1186,9 @@ void createDataFiles()
   year = rtc.getYear();
   month = rtc.getMonth();
   day = rtc.getDay();
-  hour = rtc.getHours();
-  minutes = rtc.getMinutes();
-  seconds = rtc.getSeconds();
+  hour = rtc.getHour();
+  minutes = rtc.getMinute();
+  seconds = rtc.getSecond();
 
   itoa(year, yearStr, 10);
   itoa(month, monthStr, 10);
@@ -1571,10 +1589,10 @@ void displayPage(uint8_t page)
   // On all pages add "select" and "back" indicators on the bottom of the screen
   // On data collection page, only show "back"
   display.clearDisplay();
-  display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, SSD1327_WHITE);
-  display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, SSD1327_WHITE);
-  // display.drawLine((2*display.width()/3)-1, display.height()-10, (2*display.width()/3)-1, display.height()-1, SSD1327_WHITE);
-  display.setTextColor(SSD1327_WHITE);
+  display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
+  display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
+  // display.drawLine((2*display.width()/3)-1, display.height()-10, (2*display.width()/3)-1, display.height()-1, ST7735_WHITE);
+  display.setTextColor(ST7735_WHITE);
   display.setCursor(10, display.height()-8);
   display.print("Back ");
   if(page == 2 || page == 3) // only the date and time page uses the left knob for left-right
@@ -1610,7 +1628,7 @@ void displayPage(uint8_t page)
     }
     case(1): // Time entry method menu
     {
-      display.drawLine(0, 10, display.width()-1, 10, SSD1327_WHITE);
+      display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
       updateDisplay("Timestamp method?", 0, false);
       if (currentVertMenuSelection == 0) 
       {
@@ -1626,7 +1644,7 @@ void displayPage(uint8_t page)
     }
     case(2): // Date entry
     {
-      display.drawLine(0, 10, display.width()-1, 10, SSD1327_WHITE);
+      display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
       updateDisplay("Enter date", 0, false);  
 
       char displayMonth[3];
@@ -1640,30 +1658,30 @@ void displayPage(uint8_t page)
       display.setTextSize(2);
       display.setCursor(0, 56);
 
-      if(currentHoriMenuSelection == 0) display.setTextColor(SSD1327_BLACK, SSD1327_WHITE);
+      if(currentHoriMenuSelection == 0) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
       if(manualMonth < 10) display.print('0');
       display.print(manualMonth);
 
-      display.setTextColor(SSD1327_WHITE);
+      display.setTextColor(ST7735_WHITE);
       display.print('/');
 
-      if(currentHoriMenuSelection == 1) display.setTextColor(SSD1327_BLACK, SSD1327_WHITE);
+      if(currentHoriMenuSelection == 1) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
       if(manualDay < 10) display.print('0');
       display.print(manualDay);
 
-      display.setTextColor(SSD1327_WHITE);
+      display.setTextColor(ST7735_WHITE);
       display.print('/');
 
-      if(currentHoriMenuSelection == 2) display.setTextColor(SSD1327_BLACK, SSD1327_WHITE);
+      if(currentHoriMenuSelection == 2) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
       display.print(manualYear);
 
-      display.setTextColor(SSD1327_WHITE);
+      display.setTextColor(ST7735_WHITE);
       display.setTextSize(1);
       break;
     }
     case(3): // Time entry
     {
-      display.drawLine(0, 10, display.width()-1, 10, SSD1327_WHITE);
+      display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
       updateDisplay("Enter time (UTC)", 0, false);  
   
       char displayHour[3];
@@ -1675,18 +1693,18 @@ void displayPage(uint8_t page)
       display.setTextSize(2);
       display.setCursor(0, 56);
 
-      if(currentHoriMenuSelection == 0) display.setTextColor(SSD1327_BLACK, SSD1327_WHITE);
+      if(currentHoriMenuSelection == 0) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
       if(manualHour < 10) display.print('0');
       display.print(manualHour);
 
-      display.setTextColor(SSD1327_WHITE);
+      display.setTextColor(ST7735_WHITE);
       display.print(':');
 
-      if(currentHoriMenuSelection == 1) display.setTextColor(SSD1327_BLACK, SSD1327_WHITE);
+      if(currentHoriMenuSelection == 1) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
       if(manualMinute < 10) display.print('0');
       display.print(manualMinute);
 
-      display.setTextColor(SSD1327_WHITE);
+      display.setTextColor(ST7735_WHITE);
       display.setTextSize(1);
 
       break;
@@ -1707,7 +1725,7 @@ void displayPage(uint8_t page)
       // Serial.println();
       // #endif
 
-      display.drawLine(0, 10, display.width()-1, 10, SSD1327_WHITE);
+      display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
       updateDisplay("Select a file", 0, false);  
 
       uint8_t numFilesToDisplay = 0;
@@ -1834,11 +1852,11 @@ void updateDisplay(char* text, uint8_t height, bool bg)
 
   if(bg) 
   {
-    display.setTextColor(SSD1327_BLACK, SSD1327_WHITE);
+    display.setTextColor(ST7735_BLACK, ST7735_WHITE);
   }
   else
   { 
-    display.setTextColor(SSD1327_WHITE);
+    display.setTextColor(ST7735_WHITE);
   }
   display.setCursor(0, height);
 
@@ -1870,30 +1888,30 @@ void getFileList()
   #ifdef DEBUG_PRINT
   Serial.println("\nCounting files on SD card");
   #endif
+  File root = LittleFS.open("/");
   File file;
-  File root;
   fileCount = 0;
-  if(!root.open("/"))
+  while (file = root.openNextFile())
   {
-    #ifdef DEBUG_PRINT
-    Serial.println("Error opening root");
-    #endif
-    // TODO: figure out how to handle this error
-  }
-  while(file.openNext(&root, O_RDONLY))
-  {
-    if(!file.isHidden())
-    {
-      fileCount++;
-      #ifdef DEBUG_PRINT
-      file.printName(&Serial);
-      Serial.print('\t');
-      Serial.println(fileCount);
-      #endif
+    if (file){
+      if(!file.isDirectory()){
+        fileCount++;        
+        #ifdef DEBUG_PRINT
+        file.printName(&Serial);
+        Serial.print('\t');
+        Serial.println(fileCount);
+        #endif
+      }
+      file.close();
     }
-    file.close();
+    else{
+      #ifdef DEBUG_PRINT
+      Serial.println("Error opening root");
+      #endif
+      break;
+    }
   }
-  root.rewind();
+   
 
   #ifdef DEBUG_PRINT
   Serial.print("\nFile count: ");
@@ -1903,12 +1921,14 @@ void getFileList()
   // now create an array of file names
   char filesOnSd[fileCount][30]; // Each file name should be at most 22 characters long
   uint32_t curFile = 0;
-  while(file.openNext(&root, O_RDONLY))
+  root = LittleFS.open("/");
+  while(root.openNextFile())
   {
-    if(!file.isHidden())
+    if(!file)
+      break;
+    if(!file.isDirectory())
     {
-      char fileName[30] = {0};
-      file.getName(fileName, sizeof(fileName));
+      const char* fileName = file.name();
       char shortenedFileName[30] = {0};
       memcpy(shortenedFileName, fileName, strlen(fileName) - 4); // everything but the file extension ".txt" (to fit on screen)
       strcpy(filesOnSd[curFile], shortenedFileName);
@@ -1916,7 +1936,6 @@ void getFileList()
     }
     file.close();
   }
-  root.rewind();
 
   #ifdef DEBUG_PRINT
   Serial.println("\nList of files created (pre-sort):");
@@ -1946,6 +1965,96 @@ void getFileList()
   memcpy(fileList, filesOnSd, sizeof(filesOnSd));
   fileListAlloc = true;
 }
+// void getFileList()
+// {
+//   // Free fileList if it's malloc'd
+//   // (this should never be the case, but just to be sure)
+//   if (fileListAlloc)
+//   {
+//     free(fileList);
+//     fileListAlloc = false;
+//   }
+
+//   // First count files on SD card
+//   #ifdef DEBUG_PRINT
+//   Serial.println("\nCounting files on SD card");
+//   #endif
+//   File file;
+//   File root;
+//   fileCount = 0;
+//   if(!root.open("/"))
+//   {
+//     #ifdef DEBUG_PRINT
+//     Serial.println("Error opening root");
+//     #endif
+//     // TODO: figure out how to handle this error
+//   }
+//   while(file.openNext(&root, O_RDONLY))
+//   {
+//     if(!file.isHidden())
+//     {
+//       fileCount++;
+//       #ifdef DEBUG_PRINT
+//       file.printName(&Serial);
+//       Serial.print('\t');
+//       Serial.println(fileCount);
+//       #endif
+//     }
+//     file.close();
+//   }
+//   root.rewind();
+
+//   #ifdef DEBUG_PRINT
+//   Serial.print("\nFile count: ");
+//   Serial.println(fileCount);
+//   #endif
+
+//   // now create an array of file names
+//   char filesOnSd[fileCount][30]; // Each file name should be at most 22 characters long
+//   uint32_t curFile = 0;
+//   while(file.openNext(&root, O_RDONLY))
+//   {
+//     if(!file.isHidden())
+//     {
+//       char fileName[30] = {0};
+//       file.getName(fileName, sizeof(fileName));
+//       char shortenedFileName[30] = {0};
+//       memcpy(shortenedFileName, fileName, strlen(fileName) - 4); // everything but the file extension ".txt" (to fit on screen)
+//       strcpy(filesOnSd[curFile], shortenedFileName);
+//       curFile++;
+//     }
+//     file.close();
+//   }
+//   root.rewind();
+
+//   #ifdef DEBUG_PRINT
+//   Serial.println("\nList of files created (pre-sort):");
+//   for(int i = 0; i < fileCount; ++i)
+//   {
+//     Serial.println(filesOnSd[i]);
+//   }
+//   #endif
+
+//   // Sort filesOnSd alphabetically
+//   qsort(filesOnSd, fileCount, 30, cmpstr);
+
+//   #ifdef DEBUG_PRINT
+//   Serial.println("\nList of files created:");
+//   for(int i = 0; i < fileCount; ++i)
+//   {
+//     Serial.println(filesOnSd[i]);
+//   }
+//   #endif
+
+//   root.close();
+
+//   // copy contents fo fileList memory location
+//   // free()'d when the upload menu is left with the back button
+//   // free()'d when file list is sent over serial
+//   fileList = (char *)malloc(sizeof(filesOnSd));
+//   memcpy(fileList, filesOnSd, sizeof(filesOnSd));
+//   fileListAlloc = true;
+// }
 
 /*
  * Functions and variables below this point are used for updating to ThingSpeak, not used in this version
